@@ -130,7 +130,7 @@ def getSubgraph_neo4j_COP(graph_uri, node_name, query, node_labels,
 
 def buildCypher(s,t,k_nodes,k_val):
     query = "MATCH "
-    query += "(s:`%s`)" % s
+    query += "p1=(s:`%s`)" % s
     for k in range(k_val):
         query += "--(x%i)" % (k+1)
     if(t!=None): query+= "--(t:`%s`)" % t
@@ -159,7 +159,7 @@ def buildSubgraphDictonaryForNodes(graph_uri, node_list, neo4j_query, node_label
     for node_name in node_list:
         if(debug):print("Build subgraph for ==%s==" % node_name)
         subG = getSubgraph_neo4j_COP(graph_uri, node_name, neo4j_query, node_labels, compared_labels)
-        if(len(subG.nodes())==0):return None
+        if(len(subG.nodes())==0): subG = None
         subGs[node_name] = subG 
     return subGs
 
@@ -211,6 +211,7 @@ def generateRandomWalks(subgraph_dict, node_list, method, walk_length, num_walks
     Walks = []
     for node in node_list:
         subG = subgraph_dict[node]
+        if(subG == None):continue
         # DeepWalk
         if method == 'deepwalk':
             rw = UniformRandomWalk(subG) #BiasedRandomWalk(G)
@@ -256,7 +257,8 @@ def generateRandomWalks(subgraph_dict, node_list, method, walk_length, num_walks
 #Generates a model with embeddings from provided collection of Walks.
 def buildModel(Walks):
     str_walks = [[str(n) for n in walk] for walk in Walks]
-    model = Word2Vec(str_walks, size=128, window=10, min_count=0, sg=1, workers=2, iter=5)
+    #model = Word2Vec(str_walks, vector_size=128, window=10, min_count=0, sg=1, workers=2, iter=5)
+    model = Word2Vec(str_walks, vector_size=128, window=10, min_count=0, sg=1, workers=2, epochs=5)
     return model
 
 #Computes various benchmarks for a machine learning models.
@@ -277,7 +279,7 @@ def evaluate(model, subgraph_dict, node_list1, node_list2, print_info=True):
         print("==", node, "==")
         n_all = 0
         num_in_list = 0
-        rank_in_list = 0
+        rank_in_list = 9999 
 
         #In this loop we step through all of the most similar nodes for our , we seek to find
         # where the pair for the currently selected node is in the list of all similar nodes.
@@ -307,7 +309,7 @@ def evaluate(model, subgraph_dict, node_list1, node_list2, print_info=True):
                 if rank_in_list <= 5:
                     hit_at_5_in_list += 1
                 mrr_in_list += 1/rank_in_list
-                info_tuples.append((node, pair_node, rank_in_list))
+                info_tuples.append((node, pair_node, rank_in_list,len(Node_List)))
                 break
 
     if(print_info):print('compute only in list:')
@@ -349,20 +351,26 @@ labels_in_hetio = ["Anatomy",
 "SideEffect",
 "Symptom"]
 def compactWalks(pos_pairs, neg_pairs, s, t, k_nodes,k_val):
-    pair_1 = ['Canagliflozin', 'Dexamethasone']
-    pair_2 = ['Dapagliflozin','Betamethasone']
-    test_nodes = pair_1 + pair_2
-    s = "Compound"
-    t = None
-    k_nodes = [["Gene","Disease"],["Gene"],[],[],[]]
-    k_val = 2
-    all_node_label = list(set(flatten([["Compound"],new_node_1_labels,new_node_2_labels])))
+    #pair_1 = ['Canagliflozin', 'Dexamethasone']
+    #pair_2 = ['Dapagliflozin','Betamethasone']
+    #test_nodes = pair_1 + pair_2
+    query_nodes = pos_pairs[0] + pos_pairs[1] + neg_pairs[0] + neg_pairs[1]
+    query_nodes = list(set(query_nodes))
+#    k_nodes = [["Gene","Disease"],["Gene"],[],[],[]]
+    all_node_label = list(set(flatten([[s],[t],*k_nodes])))
+#    all_node_label = labels_in_hetio
     cypher_query = buildCypher(s,t,k_nodes,k_val)
-    subgraph_dict = buildSubgraphDictonaryForNodes(test_nodes, "bolt://neo4j.het.io", cypher_query, all_node_label, None)
-    Walks = compactWalks(subgraph_dict, test_nodes, 'deepwalk', 80, 5)
+    print(cypher_query)
+    #for each node in query_nodes build a subgraph based on the cypher query
+    subgraph_dict = buildSubgraphDictonaryForNodes("bolt://neo4j.het.io", query_nodes, cypher_query, all_node_label, None)
+
+    Walks = generateRandomWalks(subgraph_dict, query_nodes, 'deepwalk', 80, 5)
+#    Walks = compactWalks(subgraph_dict, test_nodes, 'deepwalk', 80, 5)
+    if(len(Walks)==0): return None, None
     model = buildModel(Walks) 
-    eval_dic,info_tuples  = evaluate(model, subgraph_dict, pair_1, pair_2,False)
-    return info_tuples
+    eval_dic,pos_info_tuples  = evaluate(model, subgraph_dict, pos_pairs[0], pos_pairs[1], False)
+    eval_dic,neg_info_tuples  = evaluate(model, subgraph_dict, neg_pairs[0], neg_pairs[1], False)
+    return pos_info_tuples, neg_info_tuples
 
 if(__name__=="__main__"):
     x = compactWalks(None,None,None,None,None,2)

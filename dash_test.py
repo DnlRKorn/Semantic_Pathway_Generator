@@ -11,10 +11,25 @@ import io
 import dash_core_components as dcc
 import dash_html_components as html
 from dash.dependencies import Output, Input, State
+from compact_walks import compactWalks
 
 rk_nodes = []
 with open("rk_nodes.txt") as f:
     for line in f: rk_nodes.append(line.strip())
+
+labels_in_hetio = ["Anatomy",
+"BiologicalProcess",
+"CellularComponent",
+"Compound",
+"Disease",
+"Gene",
+"MolecularFunction",
+"Pathway",
+"PharmacologicClass",
+"SideEffect",
+"Symptom"]
+
+rk_nodes = labels_in_hetio
 
 rk_edges = []
 with open("rk_edges.txt") as f:
@@ -26,7 +41,8 @@ start_drop = dcc.Dropdown(
    options=[
        {'label':x, 'value':x} for x in rk_nodes 
    ],
-   value="chemical_substance",
+   #value="chemical_substance",
+   value="Compound",
    clearable=False
 )
 
@@ -82,14 +98,22 @@ k_sel = daq.NumericInput(
    id="k-select",
    min=1,
    max=5,
-   value=2
+   value=1
 ) 
 
 pos_pairs = html.Div([
     html.Div(html.B(children='Positive Pairs:')),
     dcc.Textarea(
         id='positive_pairs',
-        value='aspirin, ibuprofen',
+        value='''Canagliflozin,Dapagliflozin
+Dexamethasone,Betamethasone
+Lapatinib,Afatinib
+Captopril,Enalapril
+Losartan,Valsartan
+Nifedipine,Felodipine
+Simvastatin,Atorvastatin
+Alendronate,Incadronate
+Citalopram,Escitalopram''',
         style={'width': '20%', 'height': 300},
 )])
 
@@ -97,7 +121,12 @@ neg_pairs = html.Div([
     html.Div(html.B(children='Negative Pairs:\n')),
     dcc.Textarea(
         id='negative_pairs',
-        value='aspirin, ibuprofen',
+        value='''Dexamethasone,Canagliflozin
+Afatinib,Captopril
+Escitalopram,Losartan
+Betamethasone,Enalapril
+Dapagliflozin,Nifedipine
+Citalopram,Felodipine''',
         style={'width': '20%', 'height': 300},
 )])
 
@@ -135,23 +164,6 @@ selected_nodes = []
 selected_edges = []
 
 
-
-@app.callback(
-    Output('container-button-basic', 'children'),
-    Input('submit-val', 'n_clicks'),
-    [State('positive_pairs', 'value'), State('negative_pairs','value')]#,
-#    State('edge-dropdown', 'edges')
-)
-#1def update_output(n_clicks, nodes, edges):
-def update_output(n_clicks,pos_pairs,neg_pairs):#, sel_nodes, sel_edges):
-    x = pos_pairs + neg_pairs
-    y = "HI"
-
-    return 'The input value was "{}" "{}" and the button has been clicked {} times'.format(
-        x,
-        y,
-        n_clicks
-    )
 
 #@app.callback(
 #    Output('img-test', 'src'),
@@ -340,6 +352,77 @@ def update_output(value):
     style_5 = {'display':'block'} if k>=5 else {'display':'None'}
 
     return style_1, style_2, style_3, style_4, style_5
+
+import csv
+def processPairText(text):
+    l1 = []
+    l2 = []
+    for line in text.split('\n'):
+        a = line.split(',')
+        if(len(a)<2):continue
+        l1.append(a[0].strip())
+        l2.append(a[1].strip())
+    return l1,l2
+
+
+
+@app.callback(
+    Output('container-button-basic', 'children'),
+    Input('submit-val', 'n_clicks'),
+    [
+        State('positive_pairs', 'value'),
+        State('negative_pairs','value'),
+        State("start-dropdown", 'value'), 
+        State("tail-dropdown", 'value'), 
+        State("node-dropdown-1", 'value'), 
+        State("node-dropdown-2", 'value'), 
+        State("node-dropdown-3", 'value'), 
+        State("node-dropdown-4", 'value'), 
+        State("node-dropdown-5", 'value'),
+        State('k-select', 'value')
+    ]
+)
+def update_output(n_clicks,pos_pair_text,neg_pair_text,s,t,k1_nodes,k2_nodes,k3_nodes,k4_nodes,k5_nodes,k_val):#, sel_nodes, sel_edges):
+    if(n_clicks <= 0): return "" 
+    print("Running COMPACT WALKS!")
+    pos_pairs = processPairText(pos_pair_text)
+    neg_pairs = processPairText(neg_pair_text)
+    k_nodes = [k1_nodes,k2_nodes,k3_nodes,k4_nodes,k5_nodes]
+    #pos_info_tuples, neg_info_tuples = compactWalks(pos_pairs+neg_pairs,[[],[]],s,t,k_nodes,k_val)
+    pos_info_tuples, neg_info_tuples = compactWalks(pos_pairs,neg_pairs,s,t,k_nodes,k_val)
+    if(pos_info_tuples==None): return html.B("Pathway could not be matched in the graph.")
+#def compactWalks(pos_pairs, neg_pairs, s, t, k_nodes,k_val):
+    l = [html.B("POSITIVE PAIRS:"),html.Br()]
+    mrr = []
+    for (n1,n2,rank, tot) in pos_info_tuples:
+        mrr.append(1/int(rank))
+    print('sum mrr:', sum(mrr))
+    l.append("MRR: %f" % ((sum(mrr) * 1.0)/len(mrr)))
+    l.append(html.Br())
+    for (n1,n2,rank, tot) in pos_info_tuples:
+        info_str = "Rank of %s compared to  %s: %i out of %i" %(n1,n2,rank, tot)
+        l.append(info_str)
+        l.append(html.Br())
+    l.append(html.B("NEGATIVE PAIRS:"))
+    l.append(html.Br())
+    mrr = []
+    for (n1,n2,rank, tot) in neg_info_tuples:
+        mrr.append(1/int(rank))
+    l.append("MRR: %f" % ((sum(mrr) *1.0)/len(mrr)))
+    l.append(html.Br())
+    for (n1,n2,rank, tot) in neg_info_tuples:
+        info_str = "Rank of %s compared to  %s: %i out of %i" %(n1,n2,rank, tot)
+        l.append(info_str)
+        l.append(html.Br())
+
+
+    return html.P(l[:-1])
+
+#    return 'The input value was "{}" "{}" and the button has been clicked {} times'.format(
+#        x,
+#        y,
+#        n_clicks
+#    )
 
 if __name__ == '__main__':
     app.run_server(host="0.0.0.0",port=80,debug=True)
