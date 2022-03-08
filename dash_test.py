@@ -17,7 +17,9 @@ rk_nodes = []
 with open("rk_nodes.txt") as f:
     for line in f: rk_nodes.append(line.strip())
 
-labels_in_hetio = ["Anatomy",
+
+
+hetio_nodes = ["Anatomy",
 "BiologicalProcess",
 "CellularComponent",
 "Compound",
@@ -29,13 +31,24 @@ labels_in_hetio = ["Anatomy",
 "SideEffect",
 "Symptom"]
 
-rk_nodes = labels_in_hetio
+rk_nodes = hetio_nodes
 
 rk_edges = []
 with open("rk_edges.txt") as f:
     for line in f: rk_edges.append(line.strip())
 
 app = Dash(__name__)
+
+kg_drop = dcc.Dropdown(
+    id="kg-dropdown",
+   options=[
+       {'label':"ROBOKOP", 'value':"ROBOKOP"},
+       {'label':"HetioNet", 'value':"HetioNet"} 
+   ],
+   value="ROBOKOP",
+   clearable=False
+)
+
 start_drop = dcc.Dropdown(
     id="start-dropdown",
    options=[
@@ -58,10 +71,7 @@ node_drop = dcc.Dropdown(
     id="node-dropdown",
    options=[
        {'label':x, 'value':x} for x in rk_nodes 
-       #{'label': 'New York City', 'value': 'NYC'},
-       #{'label': 'Montreal', 'value': 'MTL'},
-       #{'label': 'San Francisco', 'value': 'SF'},
-   ],
+       ],
    multi=True
 )
 k_drop = []
@@ -72,9 +82,6 @@ for k in range(1,6):
         id="node-dropdown-%i" % k,
             options=[
                 {'label':x, 'value':x} for x in rk_nodes 
-       #{'label': 'New York City', 'value': 'NYC'},
-       #{'label': 'Montreal', 'value': 'MTL'},
-       #{'label': 'San Francisco', 'value': 'SF'},
             ],
         multi=True
     )],
@@ -87,9 +94,6 @@ edge_drop = dcc.Dropdown(
     id="edge-dropdown",
    options=[
        {'label':x, 'value':x} for x in rk_edges 
-       #{'label': 'New York City', 'value': 'NYC'},
-       #{'label': 'Montreal', 'value': 'MTL'},
-       #{'label': 'San Francisco', 'value': 'SF'},
    ],
    multi=True
 )
@@ -114,7 +118,7 @@ Nifedipine,Felodipine
 Simvastatin,Atorvastatin
 Alendronate,Incadronate
 Citalopram,Escitalopram''',
-        style={'width': '20%', 'height': 300},
+        style={'width': '20%', 'height': 140, 'width': 300},
 )])
 
 neg_pairs = html.Div([
@@ -127,10 +131,25 @@ Escitalopram,Losartan
 Betamethasone,Enalapril
 Dapagliflozin,Nifedipine
 Citalopram,Felodipine''',
-        style={'width': '20%', 'height': 300},
+        style={'width': '20%', 'height': 140, 'width': 300},
 )])
 
-app.layout = html.Div([
+
+load =  dcc.Loading(
+   id="loading-1",
+   type="default",
+   children=html.Div(id="compactwalk-output")
+)
+
+row1 = html.Tr([html.Td(html.Div([html.Div(id='dd-output-container'),
+    html.Img(id='img-test'),
+    pos_pairs, 
+    neg_pairs,
+    html.Button('Submit', id='submit-val', n_clicks=0)])),
+    html.Td(load)])
+
+
+selector = html.Div([
     html.B(children='Start Node:'),
     start_drop,
     html.B(children='Tail Node:'),
@@ -143,18 +162,20 @@ app.layout = html.Div([
     k_drop[1],
     k_drop[2],
     k_drop[3],
-    k_drop[4],
+    k_drop[4]#,
 #    html.H4(children='Pathway Edge Labels:'),
 #    edge_drop,
 #    html.Div(id='edge-output-container'),
 #    html.Div(dcc.Input(id='input-on-submit', type='text')),
-    html.Div(id='dd-output-container'),
-    html.Img(id='img-test'),
-    pos_pairs, 
-    neg_pairs,
-    html.Button('Submit', id='submit-val', n_clicks=0),
-    html.Div(id='container-button-basic', children='Enter a value and press submit')
+#    html.Div(id='container-button-basic', children='Enter a value and press submit')
+#    table
 ])
+
+row0 = html.Tr([html.Td(selector)])
+tbody = html.Tbody([row0, row1])
+table = html.Table(tbody)
+
+app.layout = html.Div([table])
 
 
 selected_nodes = []
@@ -367,7 +388,7 @@ def processPairText(text):
 
 
 @app.callback(
-    Output('container-button-basic', 'children'),
+    Output('compactwalk-output', 'children'),
     Input('submit-val', 'n_clicks'),
     [
         State('positive_pairs', 'value'),

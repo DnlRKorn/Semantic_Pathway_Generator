@@ -3,16 +3,6 @@ import os
 from itertools import product
 import itertools
 import math
-from collections import Counter
-
-#from lark import Lark, Transformer, v_args
-
-#from sklearn.manifold import TSNE
-#from sklearn.model_selection import train_test_split
-#from sklearn.linear_model import LogisticRegressionCV
-#from sklearn.metrics import accuracy_score, f1_score
-#from sklearn.metrics.pairwise import cosine_similarity
-
 
 import networkx as nx
 import numpy as np
@@ -21,11 +11,10 @@ import pandas as pd
 from gensim.models import Word2Vec
 from stellargraph.data import UniformRandomWalk, BiasedRandomWalk, UniformRandomMetaPathWalk
 from stellargraph import StellarGraph, StellarDiGraph, datasets
-from neo4j import GraphDatabase
+from neo4j import GraphDatabase, unit_of_work
 
 
-'''
-'''
+@unit_of_work(timeout=300)
 def getSubgraph_neo4j_COP(graph_uri, node_name, query, node_labels, 
     compared_labels = None):
     """Takes in a targeted subgraph, a specific node name, a CYPHER query, 
@@ -84,12 +73,12 @@ def getSubgraph_neo4j_COP(graph_uri, node_name, query, node_labels,
         result = session.run(queryStr)
         d = {}
         join_values = []
-        for i in result.graph().nodes:
-            node_name = i['name']
+        for node in result.graph().nodes:
+            node_name = node['name']
             if node_name not in join_values:
                 #print('labels = ',list(i.labels))
-                if len(i.labels)>1:
-                    for m in i.labels:
+                if len(node.labels)>1:
+                    for m in node.labels:
                         if m in user_labels:
                             node_type = m
                         
@@ -99,26 +88,28 @@ def getSubgraph_neo4j_COP(graph_uri, node_name, query, node_labels,
                             if m in compared_labels:
                                 node_type = m
                         else:
-                            node_type = list(i.labels)[0]
+                            node_type = list(node.labels)[0]
                         ###
                 else:
-                    node_type = list(i.labels)[0]
+                    node_type = list(node.labels)[0]
                 s = d.get(node_type,set())
                 s.add(node_name)
                 d[node_type] = s
             join_values.append(node_name)
 
         rels = set()
-        for i in result.graph().relationships:
-            start = i.start_node["name"]
-            end = i.end_node["name"]
-            rel_type = i.type
+        for rel in result.graph().relationships:
+            start = rel.start_node["name"]
+            end = rel.end_node["name"]
+            rel_type = rel.type
             rels.add((start, end, rel_type))
 
     raw_nodes = d        
     edges = pd.DataFrame.from_records(list(rels),columns=["source","target","label"])
 
     data_frames = {}
+
+    #For each node_label *k* create a dictonary.
     for k in d:
         node_names = list(d[k])
         df = pd.DataFrame({"name":node_names}).set_index("name")
@@ -150,7 +141,9 @@ def buildCypher(s,t,k_nodes,k_val):
         query += " AND "
         query += " AND ".join(label_clauses)
     #query += " RETURN * " 
-    query += " WITH collect(p1) as nodez UNWIND nodez as c RETURN c "
+
+    #query += " WITH collect(p1) as nodez UNWIND nodez as c RETURN c "
+    query += " RETURN p1 LIMIT 5000 "
     return query
 
 def buildSubgraphDictonaryForNodes(graph_uri, node_list, neo4j_query, node_labels, compared_labels=None, debug=False):
@@ -350,7 +343,7 @@ labels_in_hetio = ["Anatomy",
 "PharmacologicClass",
 "SideEffect",
 "Symptom"]
-def compactWalks(pos_pairs, neg_pairs, s, t, k_nodes,k_val):
+def compactWalks(pos_pairs, neg_pairs, s, t, k_nodes,k_val, kg="HetioNet"):
     #pair_1 = ['Canagliflozin', 'Dexamethasone']
     #pair_2 = ['Dapagliflozin','Betamethasone']
     #test_nodes = pair_1 + pair_2
@@ -362,7 +355,9 @@ def compactWalks(pos_pairs, neg_pairs, s, t, k_nodes,k_val):
     cypher_query = buildCypher(s,t,k_nodes,k_val)
     print(cypher_query)
     #for each node in query_nodes build a subgraph based on the cypher query
-    subgraph_dict = buildSubgraphDictonaryForNodes("bolt://neo4j.het.io", query_nodes, cypher_query, all_node_label, None)
+    graph_uri = ""
+    if(kg=="HetioNet"): graph_uri="bolt://neo4j.het.io"
+    subgraph_dict = buildSubgraphDictonaryForNodes("bolt://neo4j.het.io", query_nodes, cypher_query, all_node_label, None,True)
 
     Walks = generateRandomWalks(subgraph_dict, query_nodes, 'deepwalk', 80, 5)
 #    Walks = compactWalks(subgraph_dict, test_nodes, 'deepwalk', 80, 5)
@@ -373,6 +368,8 @@ def compactWalks(pos_pairs, neg_pairs, s, t, k_nodes,k_val):
     return pos_info_tuples, neg_info_tuples
 
 if(__name__=="__main__"):
-    x = compactWalks(None,None,None,None,None,2)
+    pair_1 = ['Canagliflozin', 'Dexamethasone']
+    pair_2 = ['Dapagliflozin','Betamethasone']
+    x = compactWalks([pair_1,pair_2],[[],[]],"Compound",None,[[]],1)
     print(x)
   
