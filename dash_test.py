@@ -74,6 +74,10 @@ node_drop = dcc.Dropdown(
        ],
    multi=True
 )
+
+#Make the 5 divs containing the node drop down. These also contain
+# a bold header saying "Level k-1:". These need to be in seperate
+# divs so they can easily be hidden and unhidden when k-val is changed.
 k_drop = []
 for k in range(1,6):
     drop = html.Div([
@@ -84,11 +88,33 @@ for k in range(1,6):
                 {'label':x, 'value':x} for x in rk_nodes 
             ],
         multi=True
-    )],
+        )
+        
+    ],
     id="node-div-%i"%k,
     style={'display':'block'}
     )
     k_drop.append(drop)
+
+#Make the 5 divs containing the edge drop down. These need
+# to be in divs so they can easily be hidden and unhidden when k-val 
+# is changed.
+k_edge_drop = []
+for k in range(1,6):
+    edge_drop = html.Div([
+        dcc.Dropdown(
+        id="edge-dropdown-%i" % k,
+            options=[
+                {'label':x, 'value':x} for x in rk_edges 
+            ],
+        multi=True
+        )
+        
+    ],
+    id="edge-div-%i"%k,
+    style={'display':'block'}
+    )
+    k_edge_drop.append(edge_drop)
 
 edge_drop = dcc.Dropdown(
     id="edge-dropdown",
@@ -159,10 +185,15 @@ selector = html.Div([
 #    html.H4(children='Pathway Node Labels:'),
 #    node_drop,
     k_drop[0],
+    k_edge_drop[0],
     k_drop[1],
+    k_edge_drop[1],
     k_drop[2],
+    k_edge_drop[2],
     k_drop[3],
-    k_drop[4]#,
+    k_edge_drop[3],
+    k_drop[4],
+    k_edge_drop[4]#,
 #    html.H4(children='Pathway Edge Labels:'),
 #    edge_drop,
 #    html.Div(id='edge-output-container'),
@@ -360,6 +391,11 @@ def COP_Visualize(ax,start,tail,pairs_list):
     Output("node-div-3",'style'),
     Output("node-div-4",'style'),
     Output("node-div-5",'style'),
+    Output("edge-div-1",'style'),
+    Output("edge-div-2",'style'),
+    Output("edge-div-3",'style'),
+    Output("edge-div-4",'style'),
+    Output("edge-div-5",'style')
     ],
     Input('k-select', 'value')
 )
@@ -372,7 +408,13 @@ def update_output(value):
     style_4 = {'display':'block'} if k>=4 else {'display':'None'}
     style_5 = {'display':'block'} if k>=5 else {'display':'None'}
 
-    return style_1, style_2, style_3, style_4, style_5
+    edge_style_1 = {'display':'block'} if k>=1 else {'display':'None'}
+    edge_style_2 = {'display':'block'} if k>=2 else {'display':'None'}
+    edge_style_3 = {'display':'block'} if k>=3 else {'display':'None'}
+    edge_style_4 = {'display':'block'} if k>=4 else {'display':'None'}
+    edge_style_5 = {'display':'block'} if k>=5 else {'display':'None'}
+
+    return style_1, style_2, style_3, style_4, style_5, edge_style_1, edge_style_2, edge_style_3, edge_style_4, edge_style_5
 
 import csv
 def processPairText(text):
