@@ -174,6 +174,7 @@ row1 = html.Tr([html.Td(html.Div([html.Div(id='dd-output-container'),
     html.Button('Submit', id='submit-val', n_clicks=0)])),
     html.Td(load)])
 
+edge_checkbox = dcc.Checklist(id="edge-checkbox",options=[{"label":"Use Edges","value":"True"}],value=[])
 
 selector = html.Div([
     html.B(children='Start Node:'),
@@ -182,6 +183,8 @@ selector = html.Div([
     tail_drop,
     html.B(children='K Value:'),
     k_sel,
+    edge_checkbox,
+
 #    html.H4(children='Pathway Node Labels:'),
 #    node_drop,
     k_drop[0],
@@ -193,13 +196,14 @@ selector = html.Div([
     k_drop[3],
     k_edge_drop[3],
     k_drop[4],
-    k_edge_drop[4]#,
+    k_edge_drop[4],
 #    html.H4(children='Pathway Edge Labels:'),
 #    edge_drop,
 #    html.Div(id='edge-output-container'),
 #    html.Div(dcc.Input(id='input-on-submit', type='text')),
 #    html.Div(id='container-button-basic', children='Enter a value and press submit')
 #    table
+     html.Div(id="test-output")
 ])
 
 row0 = html.Tr([html.Td(selector)])
@@ -397,22 +401,25 @@ def COP_Visualize(ax,start,tail,pairs_list):
     Output("edge-div-4",'style'),
     Output("edge-div-5",'style')
     ],
-    Input('k-select', 'value')
+    [Input('k-select', 'value'),
+    Input('edge-checkbox', 'value')]
 )
-def update_output(value):
-    k = value
+def hide_elements(k,show_edge):
     print('hi')
+    if(len(show_edge)==1): show_edge=True
+    else:show_edge = False
+    print('Show Edge',show_edge)
     style_1 = {'display':'block'} if k>=1 else {'display':'None'}
     style_2 = {'display':'block'} if k>=2 else {'display':'None'}
     style_3 = {'display':'block'} if k>=3 else {'display':'None'}
     style_4 = {'display':'block'} if k>=4 else {'display':'None'}
     style_5 = {'display':'block'} if k>=5 else {'display':'None'}
 
-    edge_style_1 = {'display':'block'} if k>=1 else {'display':'None'}
-    edge_style_2 = {'display':'block'} if k>=2 else {'display':'None'}
-    edge_style_3 = {'display':'block'} if k>=3 else {'display':'None'}
-    edge_style_4 = {'display':'block'} if k>=4 else {'display':'None'}
-    edge_style_5 = {'display':'block'} if k>=5 else {'display':'None'}
+    edge_style_1 = {'display':'block'} if show_edge and k>=1 else {'display':'None'}
+    edge_style_2 = {'display':'block'} if show_edge and k>=2 else {'display':'None'}
+    edge_style_3 = {'display':'block'} if show_edge and k>=3 else {'display':'None'}
+    edge_style_4 = {'display':'block'} if show_edge and k>=4 else {'display':'None'}
+    edge_style_5 = {'display':'block'} if show_edge and k>=5 else {'display':'None'}
 
     return style_1, style_2, style_3, style_4, style_5, edge_style_1, edge_style_2, edge_style_3, edge_style_4, edge_style_5
 
@@ -428,6 +435,14 @@ def processPairText(text):
     return l1,l2
 
 
+@app.callback(
+    Output('test-output', 'children'),
+    Input('edge-checkbox', 'value')
+)
+def test(val):
+    print("Value of val",val)
+    return val 
+
 
 @app.callback(
     Output('compactwalk-output', 'children'),
@@ -442,10 +457,20 @@ def processPairText(text):
         State("node-dropdown-3", 'value'), 
         State("node-dropdown-4", 'value'), 
         State("node-dropdown-5", 'value'),
+        State("edge-dropdown-1", 'value'), 
+        State("edge-dropdown-2", 'value'), 
+        State("edge-dropdown-3", 'value'), 
+        State("edge-dropdown-4", 'value'), 
+        State("edge-dropdown-5", 'value'),
         State('k-select', 'value')
     ]
 )
-def update_output(n_clicks,pos_pair_text,neg_pair_text,s,t,k1_nodes,k2_nodes,k3_nodes,k4_nodes,k5_nodes,k_val):#, sel_nodes, sel_edges):
+def submit_compact_walks(n_clicks,pos_pair_text,
+        neg_pair_text,s,t,k1_nodes,k2_nodes,
+        k3_nodes,k4_nodes,k5_nodes,
+        k1_edges,k2_edges,
+        k3_edges,k4_edges,k5_edges,
+        k_val):#, sel_nodes, sel_edges):
     if(n_clicks <= 0): return "" 
     print("Running COMPACT WALKS!")
     pos_pairs = processPairText(pos_pair_text)
@@ -460,7 +485,7 @@ def update_output(n_clicks,pos_pair_text,neg_pair_text,s,t,k1_nodes,k2_nodes,k3_
     for (n1,n2,rank, tot) in pos_info_tuples:
         mrr.append(1/int(rank))
     print('sum mrr:', sum(mrr))
-    l.append("MRR: %f" % ((sum(mrr) * 1.0)/len(mrr)))
+    l.append("MRR: %f" % ((sum(mrr) * 2.0)/len(mrr)))
     l.append(html.Br())
     for (n1,n2,rank, tot) in pos_info_tuples:
         info_str = "Rank of %s compared to  %s: %i out of %i" %(n1,n2,rank, tot)
