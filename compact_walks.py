@@ -146,6 +146,45 @@ def buildCypher(s,t,k_nodes,k_val):
     query += " RETURN p1 LIMIT 5000 "
     return query
 
+def buildCypherNodesAndEdges(s,t,t_edges,k_nodes,k_edges,k_val):
+    query = "MATCH "
+    query += "p1=(s:`%s`)" % s
+    for k in range(k_val):
+        query += "-[r%i]-(x%i)" % (k+1,k+1)
+    #if(t!=None): query+= "--(t:`%s`)" % t
+    if(t!=None): query+= "-[rt]-(t:`%s`)" % t
+
+    query += ' WHERE s.name="%s" '
+    label_clauses = []
+    for k in range(k_val):
+        if(k_nodes[k]==None or len(k_nodes[k])==0):continue
+        #where_str += ( ) 
+        clauses = ["x%i:`%s`" % (k+1,label) for label in k_nodes[k]]
+        clause_str = " ( " + " OR ".join(clauses) + " ) "
+        label_clauses.append(clause_str)
+    for k in range(k_val):
+        if(k_edges[k]==None or len(k_edges[k])==0):continue
+        #where_str += ( ) 
+#        clauses = ["r%i:`%s`" % (k+1,label) for label in k_edges[k]]
+        clause_str = "TYPE(r%s) IN [" % (k+1)
+        clause_str += ' ,'.join(['"' + x + '"' for x in k_edges[k]])
+        clause_str += " ]"
+        label_clauses.append(clause_str)
+    if(t!=None and  len(t_edges)!=0):
+        clause_str = "TYPE(rt) IN [" 
+        clause_str += ' ,'.join(['"' + x + '"' for x in t_edges])
+        clause_str += " ]"
+        #clauses = ["rt:`%s`" % (label) for label in t_edges]
+        #clause_str = " ( " + " OR ".join(clauses) + " ) "
+        label_clauses.append(clause_str)
+#        clause_str = " ( " + " OR ".join(clauses) + " ) "
+    if(len(label_clauses)!=0):
+    #    query += " WHERE "
+        query += " AND "
+        query += " AND ".join(label_clauses)
+    query += " RETURN p1 LIMIT 5000 "
+    return query
+
 def buildSubgraphDictonaryForNodes(graph_uri, node_list, neo4j_query, node_labels, compared_labels=None, debug=False):
     if(debug):print("Building out subgraphs from query")
     subGs = {}
@@ -278,6 +317,12 @@ def evaluate(model, subgraph_dict, node_list1, node_list2, print_info=True):
         # where the pair for the currently selected node is in the list of all similar nodes.
         # For this we walk through all the similar nodes, each time we see a node in our global, 
         # list of all nodes, we tick up a counter. When we find the location of the pair, we terminate. 
+        try:
+            l = model.wv.most_similar(node, topn = 1)
+        except:
+            info_tuples.append((node, pair_node, "Cannot find",len(Node_List)))
+            continue
+
         for i in model.wv.most_similar(node, topn = 20000):
             n_all += 1
 
@@ -323,6 +368,43 @@ def evaluate(model, subgraph_dict, node_list1, node_list2, print_info=True):
     
     return evaluate_dict, info_tuples
 
+def evaluate_v2(model, subgraph_dict, node_list1, node_list2, print_info=True):
+    info_tuples = []
+    Node_List = node_list1 + node_list2
+    performance_dict = {}
+    for idx, node in enumerate(node_list1):
+            #if i[0] == node_list2[node_list1.index(n)]:
+
+        
+        pair_node = node_list2[idx]
+
+        print("==", node, "==")
+        n_all = 0
+        num_in_list = 0
+        rank_in_list = 9999 
+
+        #In this loop we step through all of the most similar nodes for our , we seek to find
+        # where the pair for the currently selected node is in the list of all similar nodes.
+        # For this we walk through all the similar nodes, each time we see a node in our global, 
+        # list of all nodes, we tick up a counter. When we find the location of the pair, we terminate. 
+        try:
+            l = model.wv.most_similar(node, topn = 1)
+        except:
+            info_tuples.append((node, pair_node, "Cannot find",len(Node_List)))
+            continue
+
+        hit_list = []
+        for i in model.wv.most_similar(node, topn = 20000):
+            n_all += 1
+
+            
+            if i[0] in Node_List:
+                hit_list.append(i[0])
+        performance_dict[(node,pair_node)] = hit_list 
+
+
+    return performance_dict
+
 def flatten(l):
     for x in l:
         if hasattr(x, '__iter__') and not isinstance(x, str):
@@ -363,6 +445,39 @@ def compactWalks(pos_pairs, neg_pairs, s, t, k_nodes,k_val, kg="HetioNet"):
 #    Walks = compactWalks(subgraph_dict, test_nodes, 'deepwalk', 80, 5)
     if(len(Walks)==0): return None, None
     model = buildModel(Walks) 
+    eval_dic,pos_info_tuples  = evaluate(model, subgraph_dict, pos_pairs[0], pos_pairs[1], False)
+    eval_dic,neg_info_tuples  = evaluate(model, subgraph_dict, neg_pairs[0], neg_pairs[1], False)
+    return pos_info_tuples, neg_info_tuples
+
+def compactWalks_v2(pos_pairs, neg_pairs, s, t, t_edges, k_nodes,k_edges,show_edges,k_val, kg="HetioNet",josh_mode=False):
+    #pair_1 = ['Canagliflozin', 'Dexamethasone']
+    #pair_2 = ['Dapagliflozin','Betamethasone']
+    #test_nodes = pair_1 + pair_2
+    query_nodes = pos_pairs[0] + pos_pairs[1] + neg_pairs[0] + neg_pairs[1]
+    query_nodes = list(set(query_nodes))
+#    k_nodes = [["Gene","Disease"],["Gene"],[],[],[]]
+    all_node_label = list(set(flatten([[s],[t],*k_nodes])))
+#    all_node_label = labels_in_hetio
+    if(show_edges):
+        cypher_query = buildCypherNodesAndEdges(s,t,t_edges,k_nodes,k_edges,k_val)
+    else:
+        cypher_query = buildCypher(s,t,k_nodes,k_val)
+
+    print(cypher_query)
+    #for each node in query_nodes build a subgraph based on the cypher query
+    graph_uri = ""
+    if(kg=="HetioNet"): graph_uri="bolt://neo4j.het.io"
+    if(kg=="ROBOKOP"): graph_uri="bolt://robokopkg.renci.org:7687"
+    subgraph_dict = buildSubgraphDictonaryForNodes(graph_uri, query_nodes, cypher_query, all_node_label, None,True)
+
+    Walks = generateRandomWalks(subgraph_dict, query_nodes, 'deepwalk', 80, 5)
+#    Walks = compactWalks(subgraph_dict, test_nodes, 'deepwalk', 80, 5)
+    if(len(Walks)==0): return None, None
+    model = buildModel(Walks) 
+    if(josh_mode):
+        pos_info_tuples  = evaluate_v2(model, subgraph_dict, pos_pairs[0], pos_pairs[1], False)
+        neg_info_tuples  = evaluate_v2(model, subgraph_dict, neg_pairs[0], neg_pairs[1], False)
+        return pos_info_tuples, neg_info_tuples
     eval_dic,pos_info_tuples  = evaluate(model, subgraph_dict, pos_pairs[0], pos_pairs[1], False)
     eval_dic,neg_info_tuples  = evaluate(model, subgraph_dict, neg_pairs[0], neg_pairs[1], False)
     return pos_info_tuples, neg_info_tuples
